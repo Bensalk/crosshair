@@ -1,0 +1,13 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+signing/
+*.keystore
+# Signing keys and passwords must never be committed (they live in GitHub Secrets)
+*.jks
+*.pfx
+*.p12
+*.pem
+*pass*.txt

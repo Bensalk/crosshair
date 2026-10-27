@@ -1,0 +1,65 @@
+name: Build signed APK
+on: [push, workflow_dispatch]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: 17 }
+      - name: Load signing key
+        env:
+          KS_BASE64: ${{ secrets.KS_BASE64 }}
+          KS_PASS_SECRET: ${{ secrets.KS_PASS }}
+        run: |
+          KS="$RUNNER_TEMP/release.keystore"
+          if [ -n "$KS_BASE64" ] && [ -n "$KS_PASS_SECRET" ]; then
+            echo "$KS_BASE64" | base64 -d > "$KS"
+            echo "KS_PASS=$KS_PASS_SECRET" >> "$GITHUB_ENV"
+            echo "Using signing key from GitHub Secrets"
+          else
+            echo "::error::No signing key. Add KS_BASE64 and KS_PASS secrets. Do NOT create a new key: updates would stop installing."
+            exit 1
+          fi
+          echo "KS_FILE=$KS" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v6
+        with: { gradle-version: 8.7 }
+      - name: Run unit tests (settings, presets, backup, overlay size)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          cd CrosshairOverlay && gradle testDebugUnitTest --stacktrace
+      - name: Build signed release
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          cd CrosshairOverlay && gradle assembleRelease --stacktrace
+      - name: Read version and changelog
+        id: ver
+        run: |
+          VER=$(grep -oP 'versionName = "\K[^"]+' CrosshairOverlay/app/build.gradle.kts)
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          # The release page shows this version's entry from the in-app changelog.
+          awk -v v="v$VER" '$0==v{f=1;next} f&&/^[[:space:]]*$/{exit} f{print}' \
+            CrosshairOverlay/app/src/main/java/com/example/crosshair/MainActivity.kt | sed 's/^• /- /' > notes.md
+          [ -s notes.md ] || echo "Crosshair v$VER" > notes.md
+          cp CrosshairOverlay/app/build/outputs/apk/release/app-release.apk "crosshair-v$VER.apk"
+          # One release per version: pushes that don't bump the version don't make a new release.
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VER" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"; echo "Release v$VER already exists, skipping"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          cat notes.md
+      - name: Publish APK to Releases
+        if: github.ref == 'refs/heads/main' && steps.ver.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Crosshair v${{ steps.ver.outputs.version }}
+          body_path: notes.md
+          files: crosshair-v${{ steps.ver.outputs.version }}.apk
+      - uses: actions/upload-artifact@v7
+        with:
+          name: crosshair-apk
+          path: crosshair-v${{ steps.ver.outputs.version }}.apk
