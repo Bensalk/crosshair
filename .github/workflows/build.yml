@@ -2,6 +2,10 @@ name: Build signed APK
 on: [push, workflow_dispatch]
 permissions:
   contents: read
+# Never run two builds of the same branch at once (they would race to publish the same release).
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -38,6 +42,7 @@ jobs:
         env:
           # Public fingerprint of the Crosshair signing certificate (not a secret).
           EXPECTED_CERT: faac5c9039eb34248cf24c78f67f46824e9127a40aa07ed00a95302fe71973e5
+          GH_TOKEN: ${{ github.token }}
         run: |
           EXPECTED_CERT=$(echo "$EXPECTED_CERT" | tr 'a-f' 'A-F')
           VER=$(grep -oP 'versionName = "\K[^"]+' CrosshairOverlay/app/build.gradle.kts)
@@ -62,9 +67,11 @@ jobs:
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           printf '\n### Verify your download\n\n- APK SHA-256: `%s`\n- Signing certificate SHA-256: `%s`\n\nOnly install Crosshair from this Releases page. Android will refuse updates signed with any other key.\n' "$SHA" "$EXPECTED_CERT" >> notes.md
           # One release per version: pushes that don't bump the version don't make a new release.
-          if git ls-remote --exit-code --tags origin "refs/tags/v$VER" > /dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"; echo "Release v$VER already exists, skipping"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VER" > /dev/null &&
+             gh release view "v$VER" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx "$APK"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"; echo "Release v$VER already exists with its APK, skipping"
           else
+            # New version, or a release whose APK is missing: publish / re-attach it.
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
           cat notes.md
