@@ -22,13 +22,14 @@ The source is committed as normal files. Do **not** upload a zip.
 - Every push builds a signed release APK on GitHub Actions. JDK 17, Gradle 8.7 (installed by CI, no wrapper), AGP 8.5.2, Kotlin 1.9.24.
 - **Only pushes to `main` publish a GitHub Release**, one per app version: tag `v<versionName>`, title "Crosshair v<versionName>", APK `crosshair-v<versionName>.apk`, notes taken from that version's entry in the in-app changelog. A push that doesn't bump the version makes no new release. Other branches only upload a workflow artifact, so test risky changes on a branch first. No Android SDK is available in Claude's sandbox; the CI run is the compile check.
 - Signing: the workflow uses only the `KS_BASE64` (base64 of the keystore) and `KS_PASS` GitHub Secrets. Key alias `crosshair`. This repo was started fresh in Oct 2026 so the key never appears in its history; never commit key files (`.gitignore` blocks them). The repo is meant to be public.
-- CI security: the keystore is decoded only inside the "Build signed release" step (temp file, deleted on exit) and `KS_PASS` is passed as that step's env only, never via `GITHUB_ENV`. Third-party actions are pinned to full commit SHAs (Dependabot updates them). Keep it that way.
+- CI security: the keystore is decoded only inside the "Build signed release" step (temp file, deleted on exit) and `KS_PASS` is passed as that step's env only, never via `GITHUB_ENV`. Third-party actions are pinned to full commit SHAs (Dependabot updates them). Keep it that way. The build also checks the APK's certificate equals the official SHA-256 (`EXPECTED_CERT` in build.yml, public value) and that it isn't debuggable, and adds the APK hash + cert to the release notes.
+- Isolation: `allowBackup=false` + `data_extraction_rules.xml` exclude all app data from cloud backup and device transfer. No INTERNET permission; the unit test `appIsIsolatedAndHasNoNetworkAccess` fails if one is added. See SECURITY.md.
 - **Never create or replace the signing key.** A new key means updates won't install over the existing app. The workflow fails rather than generating one.
 
 ## App facts
 
 - Package / applicationId: `com.example.crosshair`, minSdk 26, targetSdk/compileSdk 34
-- **On every user-visible change bump `versionCode` and `versionName`** in `app/build.gradle.kts` (now 13 / 1.0; versionCode must always go up, even though the public version restarted at 1.0) and add an entry at the top of the `changelog` string in `MainActivity.kt`. Then run `python3 tools/changelog.py > CHANGELOG.md`.
+- **On every user-visible change bump `versionCode` and `versionName`** in `app/build.gradle.kts` (now 14 / 1.0; versionCode must always go up, even though the public version restarted at 1.0) and add an entry at the top of the `changelog` string in `MainActivity.kt`. Then run `python3 tools/changelog.py > CHANGELOG.md`.
 - No AndroidX, no Compose, no XML layouts: UI is built in code with plain `android.widget` views. No third-party dependencies. Keep it that way unless asked.
 
 ## Source files (`CrosshairOverlay/app/src/main/java/com/example/crosshair/`)

@@ -196,6 +196,24 @@ class CfgTest {
         assertNull(Backup.readLimited(endless))
     }
 
+    @Test fun appIsIsolatedAndHasNoNetworkAccess() {
+        val info = ctx.applicationInfo
+        assertEquals("settings must not go to cloud backup", 0, info.flags and android.content.pm.ApplicationInfo.FLAG_ALLOW_BACKUP)
+        val pkg = ctx.packageManager.getPackageInfo(ctx.packageName, android.content.pm.PackageManager.GET_PERMISSIONS or
+            android.content.pm.PackageManager.GET_PROVIDERS or android.content.pm.PackageManager.GET_SERVICES)
+        val perms = pkg.requestedPermissions?.toSet() ?: emptySet()
+        assertFalse("no internet", "android.permission.INTERNET" in perms)
+        val allowed = setOf("android.permission.SYSTEM_ALERT_WINDOW", "android.permission.FOREGROUND_SERVICE",
+            "android.permission.FOREGROUND_SERVICE_SPECIAL_USE", "android.permission.POST_NOTIFICATIONS",
+            "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "android.permission.WRITE_EXTERNAL_STORAGE")
+        assertTrue("unexpected permission: ${perms - allowed}", (perms - allowed).isEmpty())
+        assertTrue("no content providers", pkg.providers.isNullOrEmpty())
+        pkg.services?.forEach { s ->
+            if (s.name.endsWith("OverlayService")) assertFalse("overlay service must not be exported", s.exported)
+            if (s.name.endsWith("ToggleTile")) assertEquals("android.permission.BIND_QUICK_SETTINGS_TILE", s.permission)
+        }
+    }
+
     @Test fun overlayWindowIsBigEnoughForEveryStyle() {
         // The overlay window is only extentPx() * 2 wide, so it must hold the whole drawing
         // (line ends with square outline caps, ring stroke, centre dot) at every slider setting.

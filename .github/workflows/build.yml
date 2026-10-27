@@ -35,7 +35,11 @@ jobs:
           cd CrosshairOverlay && gradle assembleRelease --stacktrace --no-daemon
       - name: Read version and changelog
         id: ver
+        env:
+          # Public fingerprint of the Crosshair signing certificate (not a secret).
+          EXPECTED_CERT: faac5c9039eb34248cf24c78f67f46824e9127a40aa07ed00a95302fe71973e5
         run: |
+          EXPECTED_CERT=$(echo "$EXPECTED_CERT" | tr 'a-f' 'A-F')
           VER=$(grep -oP 'versionName = "\K[^"]+' CrosshairOverlay/app/build.gradle.kts)
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           # The release page shows this version's entry from the in-app changelog.
@@ -43,6 +47,20 @@ jobs:
             CrosshairOverlay/app/src/main/java/com/example/crosshair/MainActivity.kt | sed 's/^• /- /' > notes.md
           [ -s notes.md ] || echo "Crosshair v$VER" > notes.md
           cp CrosshairOverlay/app/build/outputs/apk/release/app-release.apk "crosshair-v$VER.apk"
+          # Refuse to publish anything not signed with the real Crosshair key, and tell users how to check.
+          APK="crosshair-v$VER.apk"
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee verify.txt
+          CERT=$(grep -m1 'certificate SHA-256 digest' verify.txt | awk '{print $NF}' | tr 'a-f' 'A-F')
+          if [ "$CERT" != "$EXPECTED_CERT" ]; then
+            echo "::error::APK is signed with an unexpected certificate ($CERT). Not publishing."; exit 1
+          fi
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' verify.txt || { echo "::error::v2 signature missing"; exit 1; }
+          if "$BT/aapt2" dump badging "$APK" | grep -q 'application-debuggable'; then
+            echo "::error::Release APK is debuggable. Not publishing."; exit 1
+          fi
+          SHA=$(sha256sum "$APK" | awk '{print $1}')
+          printf '\n### Verify your download\n\n- APK SHA-256: `%s`\n- Signing certificate SHA-256: `%s`\n\nOnly install Crosshair from this Releases page. Android will refuse updates signed with any other key.\n' "$SHA" "$EXPECTED_CERT" >> notes.md
           # One release per version: pushes that don't bump the version don't make a new release.
           if git ls-remote --exit-code --tags origin "refs/tags/v$VER" > /dev/null; then
             echo "exists=true" >> "$GITHUB_OUTPUT"; echo "Release v$VER already exists, skipping"

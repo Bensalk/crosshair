@@ -5,7 +5,7 @@ android {
     defaultConfig {
         applicationId = "com.example.crosshair"
         minSdk = 26; targetSdk = 34
-        versionCode = 13; versionName = "1.0"
+        versionCode = 14; versionName = "1.0"
     }
     signingConfigs {
         create("release") {
@@ -15,6 +15,9 @@ android {
                 storePassword = System.getenv("KS_PASS")
                 keyAlias = "crosshair"
                 keyPassword = System.getenv("KS_PASS")
+                // v2 + v3 signatures: v3 lets the signing key be rotated later without breaking updates.
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }

@@ -22,6 +22,7 @@
   <a href="#download">Download</a> •
   <a href="#building">Building</a> •
   <a href="CHANGELOG.md">Changelog</a> •
+  <a href="#privacy--security">Privacy &amp; Security</a> •
   <a href="#related">Related</a> •
   <a href="#license">License</a>
 </p>
@@ -111,6 +112,25 @@ $ gradle assembleRelease
 - Source: `CrosshairOverlay/app/src/main/java/com/example/crosshair/`
 - Plain `android.widget` views built in code: no AndroidX, no Compose, no third-party libraries.
 - Package `com.example.crosshair`, minSdk 26, targetSdk 34.
+
+## Privacy & Security
+
+- **No internet access.** The app does not have Android's internet permission, so it cannot send or receive anything.
+- **No personal data.** It stores only your crosshair settings and preset names, in its own private storage that other apps cannot read. Nothing is sent to cloud backup.
+- **Cannot see or control your screen.** The crosshair window ignores all touches (taps pass straight to your game) and cannot read what is on screen or what you type.
+- **Permissions, and why:**
+
+  | Permission | Why |
+  |---|---|
+  | Display over other apps | Draws the crosshair on top of the game |
+  | Notifications / foreground service | Keeps the crosshair running and shows Next preset / Hide / Stop |
+  | Ignore battery optimisation (optional) | Stops battery saver closing it mid-match |
+  | Storage (Android 8–9 only) | Saves the backup file to Downloads |
+
+- **Only install from this repo's [Releases](https://github.com/Bensalk/crosshair/releases).** Each release lists the APK's SHA-256 and the signing certificate, so you can check your download. The official signing certificate SHA-256 is:
+  `FA:AC:5C:90:39:EB:34:24:8C:F2:4C:78:F6:7F:46:82:4E:91:27:A4:0A:A0:7E:D0:0A:95:30:2F:E7:19:73:E5`
+  Android refuses updates signed with any other key, so a fake APK can't replace the real app.
+- Found a security problem? See [SECURITY.md](SECURITY.md).
 
 ## Related
 
