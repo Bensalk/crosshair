@@ -40,7 +40,7 @@ jobs:
           VER=$(grep -oP 'versionName = "\K[^"]+' CrosshairOverlay/app/build.gradle.kts)
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           # The release page shows this version's entry from the in-app changelog.
-          awk -v v="v$VER" '$0==v{f=1;next} f&&/^[[:space:]]*$/{exit} f{print}' \
+          awk -v v="v$VER" '$0==v{f=1;next} f&&(/^[[:space:]]*$/||/"""/||/^v[0-9]/){exit} f{print}' \
             CrosshairOverlay/app/src/main/java/com/example/crosshair/MainActivity.kt | sed 's/^• /- /' > notes.md
           [ -s notes.md ] || echo "Crosshair v$VER" > notes.md
           cp CrosshairOverlay/app/build/outputs/apk/release/app-release.apk "crosshair-v$VER.apk"
