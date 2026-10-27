@@ -32,16 +32,17 @@ class CrosshairView(c: Context) : View(c) {
     init { setLayerType(LAYER_TYPE_HARDWARE, null) }
 
     fun load(s: SharedPreferences, withOffset: Boolean) {
-        color = s.getInt("color", 0xFF00FF66.toInt()); style = s.getInt("style", 0)
-        sizeDp = s.getInt("size", 20).toFloat(); thickDp = s.getInt("thick", 2).toFloat()
-        alphaPct = s.getInt("alpha", 100); gapPct = s.getInt("gap", 40)
+        color = s.getInt("color", 0xFF00FF66.toInt()); style = Cfg.clamp("style", s.getInt("style", 0))
+        // Clamped again here so a bad stored value can never produce a giant or broken overlay.
+        sizeDp = Cfg.clamp("size", s.getInt("size", 20)).toFloat(); thickDp = Cfg.clamp("thick", s.getInt("thick", 2)).toFloat()
+        alphaPct = Cfg.clamp("alpha", s.getInt("alpha", 100)); gapPct = Cfg.clamp("gap", s.getInt("gap", 40))
         outline = s.getBoolean("outline", false); centerDot = s.getBoolean("cdot", false)
-        outlineColor = s.getInt("ocolor", Color.BLACK); outlineHalfDp = s.getInt("othick", 3)
+        outlineColor = s.getInt("ocolor", Color.BLACK); outlineHalfDp = Cfg.clamp("othick", s.getInt("othick", 3))
         guide = s.getBoolean("guide", false)
-        offsetX = if (withOffset) s.getInt("ox", 0).toFloat() else 0f
-        offsetY = if (withOffset) s.getInt("oy", 0).toFloat() else 0f
-        offsetXL = if (withOffset) s.getInt("oxL", s.getInt("ox", 0)).toFloat() else 0f
-        offsetYL = if (withOffset) s.getInt("oyL", s.getInt("oy", 0)).toFloat() else 0f
+        offsetX = if (withOffset) Cfg.clamp("ox", s.getInt("ox", 0)).toFloat() else 0f
+        offsetY = if (withOffset) Cfg.clamp("oy", s.getInt("oy", 0)).toFloat() else 0f
+        offsetXL = if (withOffset) Cfg.clamp("oxL", s.getInt("oxL", s.getInt("ox", 0))).toFloat() else 0f
+        offsetYL = if (withOffset) Cfg.clamp("oyL", s.getInt("oyL", s.getInt("oy", 0))).toFloat() else 0f
         invalidate()
     }
 

@@ -22,12 +22,13 @@ The source is committed as normal files. Do **not** upload a zip.
 - Every push builds a signed release APK on GitHub Actions. JDK 17, Gradle 8.7 (installed by CI, no wrapper), AGP 8.5.2, Kotlin 1.9.24.
 - **Only pushes to `main` publish a GitHub Release**, one per app version: tag `v<versionName>`, title "Crosshair v<versionName>", APK `crosshair-v<versionName>.apk`, notes taken from that version's entry in the in-app changelog. A push that doesn't bump the version makes no new release. Other branches only upload a workflow artifact, so test risky changes on a branch first. No Android SDK is available in Claude's sandbox; the CI run is the compile check.
 - Signing: the workflow uses only the `KS_BASE64` (base64 of the keystore) and `KS_PASS` GitHub Secrets. Key alias `crosshair`. This repo was started fresh in Oct 2026 so the key never appears in its history; never commit key files (`.gitignore` blocks them). The repo is meant to be public.
+- CI security: the keystore is decoded only inside the "Build signed release" step (temp file, deleted on exit) and `KS_PASS` is passed as that step's env only, never via `GITHUB_ENV`. Third-party actions are pinned to full commit SHAs (Dependabot updates them). Keep it that way.
 - **Never create or replace the signing key.** A new key means updates won't install over the existing app. The workflow fails rather than generating one.
 
 ## App facts
 
 - Package / applicationId: `com.example.crosshair`, minSdk 26, targetSdk/compileSdk 34
-- **On every user-visible change bump `versionCode` and `versionName`** in `app/build.gradle.kts` (now 12 / 1.0; versionCode must always go up, even though the public version restarted at 1.0) and add an entry at the top of the `changelog` string in `MainActivity.kt`. Then run `python3 tools/changelog.py > CHANGELOG.md`.
+- **On every user-visible change bump `versionCode` and `versionName`** in `app/build.gradle.kts` (now 13 / 1.0; versionCode must always go up, even though the public version restarted at 1.0) and add an entry at the top of the `changelog` string in `MainActivity.kt`. Then run `python3 tools/changelog.py > CHANGELOG.md`.
 - No AndroidX, no Compose, no XML layouts: UI is built in code with plain `android.widget` views. No third-party dependencies. Keep it that way unless asked.
 
 ## Source files (`CrosshairOverlay/app/src/main/java/com/example/crosshair/`)
@@ -38,7 +39,7 @@ The source is committed as normal files. Do **not** upload a zip.
 | `Cfg.kt` | Shared settings helpers: defaults, preset save/apply/names, current preset label, reset, backup code (`CROSSHAIR1:` + base64 JSON) and restore. Used by the activity and the service. |
 | `CrosshairView.kt` | Draws the crosshair, pixel-snapped around the exact screen centre. Picks the landscape offset when `width > height`. Preview-only fields: `forceLand`, `offsetScale`. |
 | `OverlayService.kt` | Foreground service with a full-screen, non-touchable overlay window. Notification actions: Next preset (`NEXT`), Hide/Show (`HIDE`), Stop (`STOP`). Refreshes the Quick Settings tile on start/stop. `START_STICKY`: if Android kills it, it comes back only when `want_on` is true. Window is crosshair-sized (`relayout()`, positioned at centre + offset, recomputed on rotation); full-screen only while center guide lines are on. |
-| `Backup.kt` | Saves the backup code to `Download/Crosshair/crosshair-backup.txt` (MediaStore on 10+, legacy file + permission on 8-9), auto-backup after preset save, reads a picked file for restore. |
+| `Backup.kt` | Reads at most 64 KB on restore (`readLimited`). Saves the backup code to `Download/Crosshair/crosshair-backup.txt` (MediaStore on 10+, legacy file + permission on 8-9), auto-backup after preset save, reads a picked file for restore. |
 | `ToggleTile.kt` | Quick Settings tile to start/stop. |
 | `GridBackground.kt` | Neon grid behind the preview. |
 
@@ -62,7 +63,7 @@ If you change how the crosshair is sized, keep `CrosshairView.extentPx()` coveri
 
 Styles: 0 Dot, 1 Plus, 2 Gap plus, 3 T-shape, 4 Circle, 5 Ring + dot, 6 X. Adding one means updating `styleNames` in `MainActivity.kt` and the `when` in `CrosshairView.shape()`.
 
-Don't rename keys, or users lose saved settings. When adding a preset key, handle old presets that lack it (see `Cfg.applyPreset`).
+Every number read from prefs, presets or a backup goes through `Cfg.clamp` (slider ranges), so tampered files can't break the overlay. Don't rename keys, or users lose saved settings. When adding a preset key, handle old presets that lack it (see `Cfg.applyPreset`).
 
 ## Theme
 

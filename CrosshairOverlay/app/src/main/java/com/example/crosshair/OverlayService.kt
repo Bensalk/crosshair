@@ -101,8 +101,8 @@ class OverlayService : Service() {
             val (w, h) = screenPx()
             val land = w > h
             val half = v.extentPx()
-            val cx = Math.round(w / 2f) + Math.round(prefs.getInt(if (land) "oxL" else "ox", 0) * d)
-            val cy = Math.round(h / 2f) + Math.round(prefs.getInt(if (land) "oyL" else "oy", 0) * d)
+            val cx = Math.round(w / 2f) + Math.round(Cfg.clamp("ox", prefs.getInt(if (land) "oxL" else "ox", 0)) * d)
+            val cy = Math.round(h / 2f) + Math.round(Cfg.clamp("oy", prefs.getInt(if (land) "oyL" else "oy", 0)) * d)
             p.width = half * 2; p.height = half * 2       // even size: crosshair centre lands on a whole pixel
             p.x = cx - half; p.y = cy - half
         }

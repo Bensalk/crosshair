@@ -13,6 +13,15 @@ object Cfg {
     val intKeys = listOf("color", "style", "size", "thick", "alpha", "ox", "oy", "oxL", "oyL", "gap", "ocolor", "othick")
     val boolKeys = listOf("outline", "cdot")
 
+    /** Allowed range of each number, the same as the sliders. Values from presets and backup files are
+     *  kept inside these, so a damaged or tampered file can't make the overlay huge or crash it. */
+    private val ranges = mapOf("style" to 0..6, "size" to 2..80, "thick" to 1..12, "alpha" to 10..100,
+        "gap" to 0..90, "othick" to 1..6, "ox" to -150..150, "oy" to -150..150, "oxL" to -150..150, "oyL" to -150..150)
+    const val MAX_NAME = 40
+
+    /** [v] kept inside the allowed range for [key] (colours can be any value). */
+    fun clamp(key: String, v: Int): Int = ranges[key]?.let { v.coerceIn(it) } ?: v
+
     fun prefs(c: Context): SharedPreferences = c.getSharedPreferences("cfg", Context.MODE_PRIVATE)
 
     fun ensureDefaults(s: SharedPreferences) {
@@ -30,7 +39,7 @@ object Cfg {
 
     /** Display name of a slot, or null when empty. */
     fun presetName(s: SharedPreferences, i: Int): String? =
-        json(s, i)?.let { it.optString("name", "").ifBlank { "Preset $i" } }
+        json(s, i)?.let { it.optString("name", "").trim().take(MAX_NAME).ifBlank { "Preset $i" } }
 
     fun filledSlots(s: SharedPreferences) = (1..SLOTS).filter { json(s, it) != null }
 
@@ -38,7 +47,7 @@ object Cfg {
         val o = JSONObject()
         intKeys.forEach { o.put(it, s.getInt(it, 0)) }
         boolKeys.forEach { o.put(it, s.getBoolean(it, false)) }
-        o.put("name", name.trim().ifBlank { "Preset $i" })
+        o.put("name", name.trim().take(MAX_NAME).ifBlank { "Preset $i" })
         s.edit().putString("preset$i", o.toString()).putInt("cur_preset", i).apply()
     }
 
@@ -53,7 +62,7 @@ object Cfg {
                 k == "oyL" -> o.optInt("oy", 0)
                 else -> s.getInt(k, 0)
             }
-            ed.putInt(k, v)
+            ed.putInt(k, clamp(k, v))
         }
         boolKeys.forEach { ed.putBoolean(it, o.optBoolean(it, false)) }
         ed.putInt("cur_preset", i).putInt("rev", s.getInt("rev", 0) + 1).apply()
@@ -97,10 +106,15 @@ object Cfg {
         } catch (e: Exception) { return false }
         if (!o.has("color")) return false
         val e = s.edit()
-        intKeys.forEach { k -> if (o.has(k)) e.putInt(k, o.optInt(k)) }
+        intKeys.forEach { k -> if (o.has(k)) e.putInt(k, clamp(k, o.optInt(k))) }
         (boolKeys + "guide").forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
-        for (i in 1..SLOTS) if (o.has("preset$i")) e.putString("preset$i", o.optString("preset$i")) else e.remove("preset$i")
-        e.putInt("cur_preset", o.optInt("cur_preset", 0)).putInt("rev", s.getInt("rev", 0) + 1).apply()
+        // Presets are only kept if they are valid JSON; their numbers are clamped when they are applied.
+        for (i in 1..SLOTS) {
+            val p = o.optString("preset$i", "")
+            val ok = p.length <= 4096 && try { JSONObject(p); true } catch (x: Exception) { false }
+            if (ok) e.putString("preset$i", p) else e.remove("preset$i")
+        }
+        e.putInt("cur_preset", o.optInt("cur_preset", 0).coerceIn(0, SLOTS)).putInt("rev", s.getInt("rev", 0) + 1).apply()
         ensureDefaults(s)
         return true
     }

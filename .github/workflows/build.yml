@@ -1,39 +1,38 @@
 name: Build signed APK
 on: [push, workflow_dispatch]
 permissions:
-  contents: write
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # needed to publish the release
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with: { distribution: temurin, java-version: 17 }
-      - name: Load signing key
-        env:
-          KS_BASE64: ${{ secrets.KS_BASE64 }}
-          KS_PASS_SECRET: ${{ secrets.KS_PASS }}
-        run: |
-          KS="$RUNNER_TEMP/release.keystore"
-          if [ -n "$KS_BASE64" ] && [ -n "$KS_PASS_SECRET" ]; then
-            echo "$KS_BASE64" | base64 -d > "$KS"
-            echo "KS_PASS=$KS_PASS_SECRET" >> "$GITHUB_ENV"
-            echo "Using signing key from GitHub Secrets"
-          else
-            echo "::error::No signing key. Add KS_BASE64 and KS_PASS secrets. Do NOT create a new key: updates would stop installing."
-            exit 1
-          fi
-          echo "KS_FILE=$KS" >> "$GITHUB_ENV"
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with: { gradle-version: 8.7 }
       - name: Run unit tests (settings, presets, backup, overlay size)
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           cd CrosshairOverlay && gradle testDebugUnitTest --stacktrace
+      # The signing key exists only inside this step: it is unpacked to a temp file, used, and deleted.
+      # The password is never written to GITHUB_ENV, so later steps and third-party actions can't read it.
       - name: Build signed release
+        env:
+          KS_BASE64: ${{ secrets.KS_BASE64 }}
+          KS_PASS: ${{ secrets.KS_PASS }}
         run: |
+          if [ -z "$KS_BASE64" ] || [ -z "$KS_PASS" ]; then
+            echo "::error::No signing key. Add KS_BASE64 and KS_PASS secrets. Do NOT create a new key: updates would stop installing."
+            exit 1
+          fi
+          export KS_FILE="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$KS_FILE"' EXIT
+          (umask 077; echo "$KS_BASE64" | base64 -d > "$KS_FILE")
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          cd CrosshairOverlay && gradle assembleRelease --stacktrace
+          cd CrosshairOverlay && gradle assembleRelease --stacktrace --no-daemon
       - name: Read version and changelog
         id: ver
         run: |
@@ -53,13 +52,13 @@ jobs:
           cat notes.md
       - name: Publish APK to Releases
         if: github.ref == 'refs/heads/main' && steps.ver.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: Crosshair v${{ steps.ver.outputs.version }}
           body_path: notes.md
           files: crosshair-v${{ steps.ver.outputs.version }}.apk
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crosshair-apk
           path: crosshair-v${{ steps.ver.outputs.version }}.apk

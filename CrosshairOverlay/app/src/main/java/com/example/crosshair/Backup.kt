@@ -74,7 +74,23 @@ object Backup {
     /** Auto-backup after saving a preset (on by default). Silent if it can't write. */
     fun auto(c: Context) { if (Cfg.prefs(c).getBoolean("auto_backup", true)) save(c) }
 
+    /** Real backups are about 1-2 KB; anything bigger than this is not a backup file. */
+    const val MAX_BYTES = 64 * 1024
+
     fun read(c: Context, uri: Uri): String? = try {
-        c.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) }
+        c.contentResolver.openInputStream(uri)?.use { readLimited(it) }
     } catch (e: Exception) { null }
+
+    /** Reads at most [MAX_BYTES]; returns null for anything larger (e.g. a video picked by mistake). */
+    fun readLimited(input: java.io.InputStream, max: Int = MAX_BYTES): String? {
+        val buf = java.io.ByteArrayOutputStream()
+        val chunk = ByteArray(8192)
+        while (true) {
+            val n = input.read(chunk)
+            if (n < 0) break
+            if (buf.size() + n > max) return null
+            buf.write(chunk, 0, n)
+        }
+        return String(buf.toByteArray())
+    }
 }

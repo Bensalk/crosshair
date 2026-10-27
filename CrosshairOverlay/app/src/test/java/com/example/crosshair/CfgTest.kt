@@ -156,6 +156,46 @@ class CfgTest {
         assertEquals(0f, v.offsetXL)
     }
 
+    private fun code(o: JSONObject) = "CROSSHAIR1:" + android.util.Base64.encodeToString(o.toString().toByteArray(), android.util.Base64.NO_WRAP)
+
+    @Test fun tamperedBackupValuesAreKeptInRange() {
+        Cfg.ensureDefaults(s)
+        val evil = JSONObject().put("color", 0xFFFF0000.toInt()).put("style", 99).put("size", 1_000_000).put("thick", -5)
+            .put("alpha", 0).put("gap", 500).put("othick", 1000).put("ox", 99999).put("oy", -99999).put("oxL", 400).put("oyL", -400)
+            .put("cur_preset", 77).put("preset1", "{not json").put("preset2", "x".repeat(10_000))
+        assertTrue(Cfg.restore(s, code(evil)))
+        assertEquals(6, s.getInt("style", -1)); assertEquals(80, s.getInt("size", -1)); assertEquals(1, s.getInt("thick", -1))
+        assertEquals(10, s.getInt("alpha", -1)); assertEquals(90, s.getInt("gap", -1)); assertEquals(6, s.getInt("othick", -1))
+        assertEquals(150, s.getInt("ox", 0)); assertEquals(-150, s.getInt("oy", 0))
+        assertEquals(150, s.getInt("oxL", 0)); assertEquals(-150, s.getInt("oyL", 0))
+        assertEquals(Cfg.SLOTS, s.getInt("cur_preset", -1))
+        assertNull(Cfg.presetName(s, 1)); assertNull(Cfg.presetName(s, 2))   // broken presets dropped
+    }
+
+    @Test fun tamperedPresetValuesAreKeptInRange() {
+        Cfg.ensureDefaults(s)
+        val p = JSONObject().put("size", 5000).put("style", -3).put("ox", 1_000_000).put("name", "N".repeat(500))
+        s.edit().putString("preset2", p.toString()).commit()
+        assertTrue(Cfg.applyPreset(s, 2))
+        assertEquals(80, s.getInt("size", -1)); assertEquals(0, s.getInt("style", -1)); assertEquals(150, s.getInt("ox", 0))
+        assertEquals(Cfg.MAX_NAME, Cfg.presetName(s, 2)!!.length)
+    }
+
+    @Test fun viewNeverDrawsOutOfRangeValues() {
+        s.edit().putInt("size", 1_000_000).putInt("thick", 999).putInt("style", 42).putInt("ox", 1_000_000).commit()
+        val v = CrosshairView(ctx); v.load(s, withOffset = true)
+        assertEquals(80f, v.sizeDp); assertEquals(12f, v.thickDp); assertEquals(6, v.style); assertEquals(150f, v.offsetX)
+        assertTrue(v.extentPx() < 1000)
+    }
+
+    @Test fun hugeRestoreFileIsRejectedWithoutLoadingIt() {
+        assertEquals("small", Backup.readLimited("small".byteInputStream()))
+        assertNull(Backup.readLimited(java.io.ByteArrayInputStream(ByteArray(Backup.MAX_BYTES + 1))))
+        // A "file" that never ends: reading stops at the limit instead of filling the memory.
+        val endless = object : java.io.InputStream() { override fun read() = 'A'.code }
+        assertNull(Backup.readLimited(endless))
+    }
+
     @Test fun overlayWindowIsBigEnoughForEveryStyle() {
         // The overlay window is only extentPx() * 2 wide, so it must hold the whole drawing
         // (line ends with square outline caps, ring stroke, centre dot) at every slider setting.
